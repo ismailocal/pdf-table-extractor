@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+    printf 'Usage: pdf-table-extractor INPUT.pdf\n' >&2
+    exit 2
+fi
+
+if [[ ! -f "$1" || ! -r "$1" ]]; then
+    printf 'Cannot read PDF: %s\n' "$1" >&2
+    exit 2
+fi
+
+pdf_path=$(realpath -e -- "$1")
+pdf_dir=$(dirname -- "$pdf_path")
+pdf_name=$(basename -- "$pdf_path")
+output_name=${pdf_name%.*}
+if [[ -z "$output_name" || "$output_name" == "$pdf_name" || "$output_name" == "." || "$output_name" == ".." ]]; then
+    printf 'Cannot derive an output directory from the PDF filename: %s\n' "$pdf_name" >&2
+    exit 2
+fi
+output="$pdf_dir/$output_name"
+mkdir -p -m 700 -- "$output"
+printf 'Output directory: %s\n' "$output"
+
+# Docker parses --mount as CSV. Quote the source so commas in paths are preserved.
+mount_source=${pdf_dir//\"/\"\"}
+exec docker run --rm --user "$(id -u):$(id -g)" \
+    --mount "type=bind,\"source=$mount_source\",target=/work" \
+    pdf-table-extractor:local "/work/$pdf_name" "/work/$output_name"
